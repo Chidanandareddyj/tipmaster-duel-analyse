@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duel-Pick-Analyse — welches Ergebnis gewinnt dein Duell? | TipMaster WM 2026</title>
+<meta name="description" content="Ein Werkzeug für TipMaster-Spieler: Modell auf echten WM-2026-Daten kalibriert, plus der mathematische Beweis, dass kein Tipp mehr als 50 % garantieren kann — und wo die echte Edge liegt.">
+<style>
+  :root {
+    --bg: #0a0f0d;
+    --bg2: #111a16;
+    --card: #16211c;
+    --card2: #1c2a23;
+    --line: #26382f;
+    --txt: #e8f1ec;
+    --dim: #8fa79b;
+    --dim2: #6b8478;
+    --acc: #35d07f;
+    --acc2: #1fa863;
+    --warn: #f0b429;
+    --bad: #ef5f6b;
+    --blue: #57a8ff;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font: 16px/1.6 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px 96px; }
+  a { color: var(--acc); }
+  h1, h2, h3 { line-height: 1.2; letter-spacing: -0.02em; }
+  h1 { font-size: clamp(28px, 5vw, 46px); margin: 0 0 14px; }
+  h2 { font-size: clamp(21px, 3.2vw, 28px); margin: 0 0 6px; }
+  h3 { font-size: 17px; margin: 26px 0 8px; }
+  p { margin: 0 0 14px; }
+  code, .mono { font-family: var(--mono); font-size: 0.92em; }
+  code { background: #0d1713; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+  .dim { color: var(--dim); }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 22px;
+  }
+  .grid { display: grid; gap: 16px; }
+  @media (min-width: 860px) { .g3 { grid-template-columns: repeat(3, 1fr); } .g2 { grid-template-columns: 1fr 1fr; } }
+  header.hero {
+    padding: 56px 0 30px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 34px;
+  }
+  .tick {
+    display: inline-block; font: 600 12px/1 var(--mono); letter-spacing: .12em;
+    text-transform: uppercase; color: var(--acc);
+    background: rgba(53,208,127,.1); border: 1px solid rgba(53,208,127,.3);
+    padding: 7px 11px; border-radius: 99px; margin-bottom: 20px;
+  }
+  .lede { font-size: clamp(16px, 2.1vw, 19px); color: #c3d6cb; max-width: 74ch; }
+  .verdict {
+    border-left: 3px solid var(--acc); background: var(--bg2);
+    padding: 16px 20px; border-radius: 0 10px 10px 0; margin: 26px 0;
+  }
+  .verdict strong { color: var(--acc); }
+
+  /* ---- controls ---- */
+  .controls { display: grid; gap: 16px; }
+  @media (min-width: 780px) { .controls { grid-template-columns: 1fr 1fr 1.1fr; } }
+  label.lb { display: block; font: 600 12px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--dim2); margin-bottom: 8px; }
+  select, input[type=range] { width: 100%; }
+  select {
+    background: var(--card2); color: var(--txt); border: 1px solid var(--line);
+    border-radius: 9px; padding: 11px 12px; font: 500 15px var(--sans);
+    appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--dim) 50%), linear-gradient(135deg, var(--dim) 50%, transparent 50%);
+    background-position: calc(100% - 19px) 50%, calc(100% - 14px) 50%;
+    background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  }
+  .srow { display: flex; align-items: center; gap: 12px; }
+  .srow input[type=range] { flex: 1; accent-color: var(--acc); }
+  .sval { font: 600 14px var(--mono); color: var(--acc); min-width: 52px; text-align: right; }
+  .swap { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  button {
+    background: var(--card2); color: var(--txt); border: 1px solid var(--line);
+    border-radius: 9px; padding: 9px 14px; font: 500 14px var(--sans); cursor: pointer;
+  }
+  button:hover { border-color: var(--acc2); color: #fff; }
+  button.primary { background: var(--acc2); border-color: var(--acc2); color: #05170e; font-weight: 700; }
+  button.primary:hover { background: var(--acc); border-color: var(--acc); }
+  .chip { font: 600 12px var(--mono); padding: 3px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--dim); }
+
+  /* ---- pick cards ---- */
+  .pick {
+    display: flex; flex-direction: column; gap: 4px;
+    background: var(--card2); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px;
+  }
+  .pick.hl { border-color: var(--acc2); box-shadow: 0 0 0 1px rgba(31,168,99,.35), 0 8px 28px -14px rgba(53,208,127,.5); }
+  .pick .role { font: 600 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--dim2); }
+  .pick .score { font: 800 clamp(30px, 6vw, 40px)/1 var(--mono); letter-spacing: -.02em; margin: 6px 0 2px; }
+  .pick .sub { font-size: 13.5px; color: var(--dim); }
+  .pick .big { font: 700 20px var(--mono); color: var(--acc); margin-top: 8px; }
+  .pick .why { font-size: 13px; color: var(--dim); margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; }
+
+  /* ---- heatmap ---- */
+  .hm { display: grid; gap: 2px; font-family: var(--mono); }
+  .hm .cell {
+    aspect-ratio: 1; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+    font-size: clamp(8px, 1.5vw, 11px); color: #06140d; font-weight: 700; position: relative;
+  }
+  .hm .cell.mark { outline: 2px solid #fff; outline-offset: -2px; z-index: 2; }
+  .hm .cell.zero { color: transparent; }
+  .axis { display: flex; gap: 2px; margin-top: 6px; font: 600 10px var(--mono); color: var(--dim2); }
+  .axis span { flex: 1; text-align: center; }
+  .legend { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 12px; color: var(--dim); }
+  .bar { height: 9px; border-radius: 99px; flex: 1; background: linear-gradient(90deg, #10231a, #1fa863, #35d07f); }
+
+  /* ---- table ---- */
+  .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { font: 600 11px/1.4 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--dim2); }
+  tbody tr:hover { background: rgba(53,208,127,.045); }
+  td.num { font-family: var(--mono); }
+  td.win { color: var(--acc); font-weight: 700; }
+  td.lose { color: var(--bad); }
+  .mirror td { color: var(--dim2); font-style: italic; }
+
+  .stat { background: var(--card2); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .stat .k { font: 600 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--dim2); }
+  .stat .v { font: 800 clamp(22px, 4vw, 30px)/1.1 var(--mono); margin: 8px 0 4px; letter-spacing: -.02em; }
+  .stat .n { font-size: 12.5px; color: var(--dim); }
+  .ok { color: var(--acc); } .no { color: var(--bad); } .wa { color: var(--warn); }
+
+  ul, ol { padding-left: 22px; margin: 0 0 14px; }
+  li { margin-bottom: 7px; }
+  .note { font-size: 13.5px; color: var(--dim); }
+  details { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; background: var(--bg2); }
+  summary { cursor: pointer; font-weight: 600; }
+  details[open] summary { margin-bottom: 12px; }
+  .formula { background: #0d1713; border: 1px solid var(--line); border-radius: 9px; padding: 13px 16px; font-family: var(--mono); font-size: 13.5px; overflow-x: auto; margin: 0 0 14px; color: #cfe6da; }
+  footer { border-top: 1px solid var(--line); margin-top: 46px; padding-top: 22px; font-size: 13.5px; color: var(--dim2); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <span class="tick">Duel-Pick-Analyse · WM 2026</span>
+  <h1>Welches Ergebnis gewinnt dein Duell —<br>und welches nur das Spiel?</h1>
+  <p class="lede">
+    Bei TipMaster tippst du das exakte Ergebnis und trittst im direkten Duell gegen genau
+    einen anderen Manager an. Wer näher dran ist, gewinnt. Das ist kein Tippspiel gegen den
+    Spielplan, sondern ein <strong>Spiel gegen eine Person</strong> — und deshalb ist die
+    Frage „welches Ergebnis ist am wahrscheinlichsten?“ die falsche Frage.
+  </p>
+  <div class="verdict">
+    <strong>Das wichtigste Ergebnis dieser Analyse:</strong> Weil dein Gegner deinen Tipp
+    jederzeit <em>spiegeln</em> kann — und ein gespiegeltes Duell ist auf Distanz gleichauf,
+    also entscheidet der Ballbesitz-Tipp und damit der Zufall — kann
+    <strong>kein Tipp jemals mehr als 50 % garantieren</strong>. Nicht 1:1, nicht 2:1, keiner.
+    Wer dir etwas anderes verkauft, verkauft dir nichts. Die gesamte echte Edge liegt darin,
+    den Gegner zu <em>lesen</em> — nicht darin, das „klügere“ Ergebnis zu finden.
+  </div>
+  <p class="note">
+    Trotzdem ist die Wahl des Ergebnisses nicht egal: Auf <strong>58 % aller Partien</strong>
+    unterscheidet sich der sicherste Tipp vom wahrscheinlichsten — und in jeder dieser Partien
+    verschlechtert der wahrscheinlichste Tipp deinen Worst Case. Unten siehst du beides
+    nebeneinander, für jede Paarung.
+  </p>
+</header>
+
+<!-- ================= 1. ANALYSE ================= -->
+<section id="analyse">
+  <h2>1 · Deine Partie</h2>
+  <p class="dim">Wähle die Paarung. Alle Zahlen kommen aus einem Dixon-Coles-Modell, das ausschließlich auf den <strong>72 Gruppenspielen der WM 2026</strong> kalibriert ist (Details in Abschnitt 4).</p>
+
+  <div class="card">
+    <div class="controls">
+      <div>
+        <label class="lb" for="home">Heimteam</label>
+        <select id="home"></select>
+      </div>
+      <div>
+        <label class="lb" for="away">Auswärtsteam</label>
+        <select id="away"></select>
+      </div>
+      <div>
+        <label class="lb" for="drawAv">Annahme: Unentschieden-Vermeidung der Mitspieler <span id="drawAvV" class="sval"></span></label>
+        <div class="srow">
+          <input type="range" id="drawAv" min="0.3" max="1.2" step="0.05" value="0.65">
+        </div>
+        <div class="note" style="margin-top:6px">
+          Wie stark tippen andere Manager Unentschieden seltener, als sie tatsächlich passieren?
+          1,0 = objektiv, 0,65 = deutlich gemieden. <strong>Das ist die einzige Annahme, auf der
+          die Edge-Zahl beruht</strong> — deshalb ist sie hier ein Regler und keine versteckte Konstante.
+        </div>
+      </div>
+    </div>
+    <div class="swap">
+      <button id="swapBtn" type="button">⇄ Seiten tauschen</button>
+      <button id="neutralBtn" type="button">Neutraler Platz: <span id="neutralState">an</span></button>
+      <span class="chip" id="xgChip">–</span>
+    </div>
+  </div>
+
+  <div class="grid g3" id="picks" style="margin-top:16px"></div>
+
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card">
+      <h3 style="margin-top:0">Ergebnis-Verteilung</h3>
+      <p class="note" style="margin-bottom:12px">
+        Die Zelle zeigt die Wahrscheinlichkeit in Prozent. Weiß umrandet = der jeweils
+        markierte Tipp. Je dunkler, desto unwahrscheinlicher.
+      </p>
+      <div class="hm" id="heat"></div>
+      <div class="axis" id="heatAxis"></div>
+      <div class="legend"><span>unwahrscheinlich</span><span class="bar"></span><span>wahrscheinlich</span></div>
+      <div style="margin-top:14px;font-size:12.5px;color:var(--dim)">
+        <span style="border-bottom:2px solid var(--acc)">▬ sicherster Tipp</span> ·
+        <span style="border-bottom:2px solid var(--blue)">▬ wahrscheinlichstes Ergebnis</span> ·
+        <span style="border-bottom:2px solid var(--warn)">▬ Antwort gegen den Mitspieler-Schnitt</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Warum „wahrscheinlichstes Ergebnis“ nicht „bester Tipp“ ist</h3>
+      <p class="note">
+        Der Worst Case ist die Gewinnwahrscheinlichkeit gegen den <em>ungünstigsten</em>
+        gegnerischen Tipp — hier gegen den Gegner, der genau deinen Tipp spiegelt.
+      </p>
+      <div id="worstBox"></div>
+      <h3>Ertrag gegen verschiedene Gegnertypen</h3>
+      <div class="tw"><table id="evTable"></table></div>
+      <p class="note" style="margin-top:12px">
+        <strong>Immer 1:1</strong> ist die untere Schranke: Ein Gegner, der stur 1:1 tippt,
+        kann von keinem der drei Tipps geschlagen werden — er verliert nie, er gewinnt nur nicht.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 2. GEGEN UNS BEKANNTE GEGNER ================= -->
+<section id="gegner" style="margin-top:52px">
+  <h2>2 · Gegen einen Gegner, den du kennst</h2>
+  <p class="dim">
+    Weil niemand gegen einen unbekannten Gegner über 50 % kommt, ist die einzige Quelle echter
+    Edge die Information über den Menschen auf der anderen Seite. Sag dem Werkzeug, was er
+    tippt — du siehst, was du dagegen setzen musst.
+  </p>
+  <div class="card">
+    <label class="lb" for="oppScore">Gegner tippt</label>
+    <div class="srow" style="max-width:420px">
+      <select id="oppScore" style="flex:1"></select>
+      <button id="oppRefresh" type="button">Beste Antwort</button>
+    </div>
+    <div id="oppOut" style="margin-top:18px"></div>
+  </div>
+</section>
+
+<!-- ================= 3. BACKTEST ================= -->
+<section id="backtest" style="margin-top:52px">
+  <h2>3 · Der ehrliche Test: 32 echte K.-o.-Spiele</h2>
+  <p class="dim">
+    Das Modell wurde <strong>nur auf den Gruppenspielen</strong> kalibriert und dann blind auf
+    alle 32 K.-o.-Spiele der WM 2026 angewendet. Jedes Duell wurde mit der echten TipMaster-Regel
+    auf dem echten Ergebnis ausgezählt. Keine Anpassung im Nachhinein.
+  </p>
+  <div class="card">
+    <div class="tw"><table id="btTable"></table></div>
+    <div id="btNote" style="margin-top:16px"></div>
+  </div>
+</section>
+
+<!-- ================= 4. MODELL ================= -->
+<section id="modell" style="margin-top:52px">
+  <h2>4 · Modell, Beweis und Grenzen</h2>
+
+  <div class="grid g3" style="margin-bottom:18px" id="statRow"></div>
+
+  <details open>
+    <summary>Der Spiegel-Beweis: warum nie mehr als 50 % drin sind</summary>
+    <p>Sei <code>d(t, r)</code> die Distanz zwischen Tipp <code>t</code> und Ergebnis <code>r</code>. Beim Duell gewinnt, wessen Distanz kleiner ist.</p>
+    <div class="formula">d(t, r) = (t<sub>heim</sub> − r<sub>heim</sub>)² + (t<sub>ausw</sub> − r<sub>ausw</sub>)²</div>
+    <p>Angenommen, du wählst irgendeinen Tipp <code>s</code>. Ein Gegner, der <code>s</code> kennt, kann einfach dasselbe tippen. Dann gilt für <em>jedes</em> reale Ergebnis <code>r</code>:</p>
+    <div class="formula">d(s, r) = d(s, r)  ⟹  Gleichstand bei der Distanz  ⟹  Ballbesitz-Tipp entscheidet</div>
+    <p>
+      Über den Ballbesitz-Tipp hat aber keine Seite einen Informationsvorsprung — er ist ein
+      Münzwurf, also 50 %. Damit hat der Gegner eine Strategie, die ihm <strong>garantiert
+      mindestens 50 %</strong> einbringt, egal was du tippst. Also kann kein Tipp dir mehr als
+      50 % garantieren. Das ist kein Modellartefakt, sondern folgt allein aus der Spielregel —
+      es gilt für jeden Tipp, jedes Team und jede Partie.
+    </p>
+    <p class="note">
+      Empirisch bestätigt: Über alle 2 256 geordneten Paarungen der 48 WM-Teams liegt der
+      garantierte Worst Case des sichersten Tipps zwischen <strong>0,4792 und exakt 0,5000</strong>.
+      In 2 198 der 2 256 Partien sind es exakt 0,5000; die kleinen Abweichungen entstehen nur,
+      weil das Gitter bei 8 Toren abgeschnitten wird.
+    </p>
+  </details>
+
+  <details>
+    <summary>Warum trotzdem 58 % der Partien zwei verschiedene Antworten haben</summary>
+    <p>
+      Der sichere Tipp maximiert den Worst Case, das wahrscheinlichste Ergebnis maximiert die
+      Wahrscheinlichkeit. Das sind zwei verschiedene Zielfunktionen, und sie fallen in
+      <strong>1 308 von 2 256 Partien (58,0 %)</strong> auseinander — in <em>jeder einzelnen</em>
+      dieser Partien ist der sichere Tipp strikt besser im Worst Case, in keiner einzigen
+      schlechter. Der sichere Tipp dominiert also: gleicher Worst Case oder besser, und im
+      Backtest zusätzlich der stärkere Ertrag gegen realistische Gegner.
+    </p>
+    <p class="note">
+      Beispiel Portugal – Spanien: wahrscheinlichstes Ergebnis 0:0, sicherster Tipp 1:1.
+      Gegen den modellierten Mitspieler-Schnitt bringt 0:0 nur <strong>45,1 %</strong>,
+      1:1 dagegen <strong>66,7 %</strong>. Der naheliegende Tipp ist hier der verlierende.
+    </p>
+  </details>
+
+  <details>
+    <summary>Kalibrierung und warum regularisiert wurde</summary>
+    <p>
+      72 Gruppenspiele, aber 97 Parameter (48 Angriff, 48 Abwehr, plus Grundniveau). Ohne
+      Regularisierung passt das Modell die Trainingsdaten praktisch auswendig — messbar an der
+      Lücke zwischen Trainings- und Holdout-Log-Likelihood:
+    </p>
+    <div class="tw"><table id="cvTable"></table></div>
+    <p class="note" style="margin-top:12px">
+      Bei <code>ridge = 0</code> beträgt die Lücke <strong>8,11</strong> — reine Interpolation.
+      Die 6-fache Kreuzvalidierung wählt <strong>ridge = 2</strong> und drückt die Lücke auf
+      0,57, bei gleichzeitig bester Holdout-Likelihood. Genau dieser Wert wird verwendet.
+      Zusätzlich sind die beiden Mittelwerte der Angriffs- und Abwehrstärken auf 0 gepinnt
+      (sonst ist das Modell nicht identifizierbar), und die Standardfehler werden aus der
+      Poisson-Information berechnet.
+    </p>
+  </details>
+
+  <details>
+    <summary>Deutschland: der Gruppenplatz 1 war ein Artefakt</summary>
+    <div id="gerBox"></div>
+    <p class="note">
+      Deutschland hatte nach der Gruppenphase die <em>beste</em> Angriffsbewertung aller 48 Teams.
+      Grund war ein einziges Spiel: 7:1 gegen Curaçao, den zweitschwächsten Angriff des Turniers.
+      Im K.-o.-Modell — kalibriert auf die Spiele gegen echte Gegner — landet dieselbe Mannschaft
+      im Mittelfeld. Die Lücke beträgt rund −0,60 Log-Tore, also etwa 1,7 Standardfehler: ein
+      klarer Hinweis, aber bei drei Spielen noch kein statistischer Beweis. Genau diese
+      Vorsicht ist der Punkt — ein Tippspiel-Modell, das ein 7:1 gegen einen Außenseiter
+      ungewichtet einrechnet, überschätzt systematisch.
+    </p>
+  </details>
+
+  <details>
+    <summary>Was dieses Modell nicht weiß</summary>
+    <ul>
+      <li><strong>Die exakte Distanzmetrik veröffentlicht TipMaster nicht.</strong> Die Formulierung „wer näher am echten Ergebnis liegt“ ist als quadratischer Fehler umgesetzt — die Lesart, die zu „näher“ und zu einem echten Distanzmaß passt. Bei absoluter Differenz ändert sich nur eine Funktion im Code; alle Aussagen über die 50-%-Schranke bleiben identisch, weil der Spiegel-Beweis für <em>jede</em> symmetrische Distanz gilt.</li>
+      <li><strong>Keine Live-Zuschauerdaten.</strong> TipMaster veröffentlicht Konsenswerte nur über seine Agent-API; von hier aus antwortet sie nicht. Die Mitspieler-Verteilung ist deshalb eine <em>offen gelegte Annahme</em> mit Regler — keine Beobachtung.</li>
+      <li><strong>Kein Ballbesitz-Modell.</strong> Der Ballbesitz-Tipp entscheidet Gleichstände, wird hier aber als Münzwurf behandelt, weil kein Team den Ballbesitz des anderen vorhersagen kann. Wer dort eine echte Meinung hat, holt zusätzlich etwas heraus.</li>
+      <li><strong>Kleine Stichprobe.</strong> Drei Gruppenspiele pro Team sind wenig. Deshalb Regularisierung, Standardfehler und der zurückhaltende Umgang mit dem Deutschland-Befund.</li>
+      <li><strong>Keine Wett-Quoten.</strong> Das hier ist ein Tippspiel-Modell, kein Wettmodell. TipMaster ist ausdrücklich ein kostenloses Vorhersagespiel.</li>
+    </ul>
+  </details>
+</section>
+
+<footer>
+  <p>
+    Datenquelle: alle 104 Ergebnisse der WM 2026, Summe <strong>308 Tore</strong> — stimmt exakt
+    mit der offiziellen FIFA-Gesamtzahl überein; zusätzlich stimmen alle 48 Gruppentabellen
+    unabhängig mit den 72 Ergebnissen überein.
+  </p>
+  <p>
+    Eigenständiges Analyse-Werkzeug, erstellt als Bewerbungsarbeit. Nicht mit TipMaster
+    verbunden, nicht von TipMaster betrieben, keine Wettberatung. TipMaster ist ein
+    kostenloses Vorhersagespiel ohne Einsatz und ohne Gewinnmöglichkeit.
+  </p>
+</footer>
+
+</div>
+
+<script type="module">
+import {
+  MAX_GOALS, scoreMatrix, payoffMatrix, tipDistance, duelOutcome, flatten,
+  fit, crossValidateRidge, maximinPure,
+} from '../engine/engine.mjs';
+
+const $ = (id) => document.getElementById(id);
+const NG = MAX_GOALS + 1, NACT = NG * NG;
+const PTS = [];
+for (let i = 0; i < NG; i++) for (let j = 0; j < NG; j++) PTS.push([i, j]);
+
+/* German number formatting. `toFixed` always emits a dot, so every decimal on
+   this page goes through a comma-forcing helper — otherwise the numbers read
+   as English inside German prose. */
+const de = (x, d = 1) => x.toFixed(d).replace('.', ',');
+const pct = (x, d = 1) => de(100 * x, d) + ' %';
+const f2 = (x) => de(x, 2);
+const num = (x, d = 3) => de(x, d);
+
+/* ---------- data ---------- */
+const bundle = await (await fetch('./data/bundle.json')).json();
+const TEAMS = bundle.teams;
+const byName = Object.fromEntries(TEAMS.map((t) => [t.n, t]));
+const NAMES = [...TEAMS].sort((a, b) => a.n.localeCompare(b.n, 'de')).map((t) => t.n);
+const M = bundle.meta;
+
+const HUES = ['#35d07f', '#57a8ff', '#f0b429'];
+
+/* ---------- model helpers ---------- */
+function matrix(lh, la) { return scoreMatrix(lh, la, M.rho); }
+
+function lambdasFor(homeN, awayN, neutral, overrides) {
+  const H = byName[homeN], A = byName[awayN];
+  const ha = neutral ? 0 : M.homeAdvantage;
+  let mu = M.muGroup, hA = H.a, hD = H.d, aA = A.a, aD = A.d;
+  if (overrides) ({ mu, hA, hD, aA, aD } = overrides);
+  return {
+    lh: Math.exp(mu + hA - aD + ha / 2),
+    la: Math.exp(mu + aA - hD - ha / 2),
+  };
+}
+
+const modalPick = (P) => {
+  let bi = 0, bv = -1;
+  for (let k = 0; k < NACT; k++) { const [i, j] = PTS[k]; if (P[i][j] > bv) { bv = P[i][j]; bi = k; } }
+  return { pick: PTS[bi], p: bv, idx: bi };
+};
+
+const safePick = (A) => {
+  let bi = 0, bv = -Infinity;
+  for (let s = 0; s < NACT; s++) {
+    let w = Infinity;
+    for (let t = 0; t < NACT; t++) if (A[s][t] < w) w = A[s][t];
+    if (w > bv) { bv = w; bi = s; }
+  }
+  return { pick: PTS[bi], guarantee: bv, idx: bi };
+};
+
+const evAgainst = (A, dist) => {
+  const out = new Float64Array(NACT);
+  for (let s = 0; s < NACT; s++) {
+    const row = A[s];
+    let acc = 0;
+    for (let t = 0; t < NACT; t++) if (dist[t]) acc += dist[t] * row[t];
+    out[s] = acc;
+  }
+  return out;
+};
+const bestResponse = (A, dist) => {
+  const ev = evAgainst(A, dist);
+  let bi = 0;
+  for (let s = 1; s < NACT; s++) if (ev[s] > ev[bi]) bi = s;
+  return { pick: PTS[bi], ev: ev[bi], evAll: ev, idx: bi };
+};
+
+/**
+ * Crowd model — the one stated assumption, exposed as a slider.
+ * Start from the model's own score distribution over the scorelines a human
+ * actually writes down, then apply draw aversion and a low-score bias.
+ */
+const HUMAN_TIPS = [
+  [0,0],[1,0],[0,1],[1,1],[2,0],[0,2],[2,1],[1,2],[2,2],
+  [3,0],[0,3],[3,1],[1,3],[3,2],[2,3],[3,3],[4,0],[0,4],[4,1],[4,2],
+];
+function crowdDist(P, drawAversion = 0.65, scoreBias = 0.5, topN = 10) {
+  const d = new Float64Array(NACT);
+  const pool = HUMAN_TIPS.map(([i, j]) => ({ i, j, p: P[i][j] }))
+    .sort((a, b) => b.p - a.p).slice(0, topN);
+  let tot = 0;
+  for (const { i, j, p } of pool) {
+    const w = p * (i === j ? drawAversion : 1) / (1 + scoreBias * (i + j));
+    d[i * NG + j] = w; tot += w;
+  }
+  for (let k = 0; k < NACT; k++) d[k] /= tot;
+  return d;
+}
+const uniformCrowd = () => {
+  const d = new Float64Array(NACT);
+  for (const [i, j] of HUMAN_TIPS) d[i * NG + j] = 1 / HUMAN_TIPS.length;
+  return d;
+};
+const pointMass = (i, j) => { const d = new Float64Array(NACT); d[i * NG + j] = 1; return d; };
+
+/* ---------- state ---------- */
+const state = { home: 'Spain', away: 'Argentina', neutral: true, drawAv: 0.65, opp: [1, 1] };
+
+/* ---------- render ---------- */
+function selectOpts(sel, val) {
+  sel.innerHTML = NAMES.map((n) => `<option value="${n}"${n === val ? ' selected' : ''}>${n}</option>`).join('');
+}
+selectOpts($('home'), state.home);
+selectOpts($('away'), state.away);
+selectOpts($('oppScore'), '1:1');
+
+function render() {
+  if (state.home === state.away) {
+    const alt = NAMES.find((n) => n !== state.home);
+    state.away = alt;
+    selectOpts($('away'), alt);
+  }
+  const { lh, la } = lambdasFor(state.home, state.away, state.neutral);
+  const P = matrix(lh, la);
+  const { A } = payoffMatrix(P);
+  const modal = modalPick(P);
+  const safe = safePick(A);
+  const cl = crowdDist(P, state.drawAv);
+  const brCrowd = bestResponse(A, cl);
+  const brUni = bestResponse(A, uniformCrowd());
+
+  $('xgChip').textContent = `erwartete Tore ${f2(lh)} : ${f2(la)}`;
+  $('neutralState').textContent = state.neutral ? 'an' : 'aus';
+
+  // --- three pick cards
+  const cards = [
+    {
+      role: 'Sicherster Tipp', score: safe.pick, hl: true, hue: HUES[0],
+      big: pct(safe.guarantee),
+      sub: 'garantierte Gewinnwahrscheinlichkeit, egal was der Gegner tippt',
+      why: `Wahrscheinlichkeit dieses Ergebnisses: ${pct(safe.pick && P[safe.pick[0]][safe.pick[1]])}. `
+         + (safe.pick[0] === modal.pick[0] && safe.pick[1] === modal.pick[1]
+            ? 'Hier ist er identisch mit dem wahrscheinlichsten Ergebnis.'
+            : `Achtung: das wahrscheinlichste Ergebnis ist <strong>${modal.pick[0]}:${modal.pick[1]}</strong> — und das ist der schlechtere Tipp.`),
+    },
+    {
+      role: 'Wahrscheinlichstes Ergebnis', score: modal.pick, hue: HUES[1],
+      big: pct(modal.p), sub: 'die häufigste einzelne Zelle der Verteilung',
+      why: `Gegen den Mitspieler-Schnitt nur ${pct(brCrowd.evAll[modal.idx])}, `
+         + `Worst Case ${pct(worstOf(A, modal.idx))}.`,
+    },
+    {
+      role: 'Gegen den Mitspieler-Schnitt', score: brCrowd.pick, hue: HUES[2],
+      big: pct(brCrowd.ev), sub: 'beste Antwort auf das modellierte Mitspielerfeld',
+      why: `Edge gegenüber 50 %: <strong>${brCrowd.ev > 0.5 ? '+' : ''}${de((brCrowd.ev - 0.5) * 100, 1)} Prozentpunkte</strong>. `
+         + `Beruht allein auf der Annahme „Unentschieden-Vermeidung ${num(state.drawAv, 2)}“ — `
+         + `dieser Regler verschiebt das Ergebnis nur um wenige Zehntel, `
+         + `weil die Edge vor allem aus der <em>Distanzgeometrie</em> und dem erratenen Lieblings-Tipp des Gegners kommt.`,
+    },
+  ];
+  $('picks').innerHTML = cards.map((c) => `
+    <div class="pick${c.hl ? ' hl' : ''}">
+      <span class="role" style="color:${c.hue}">${c.role}</span>
+      <span class="score" style="color:${c.hue}">${c.score[0]} : ${c.score[1]}</span>
+      <span class="sub">${c.sub}</span>
+      <span class="big" style="color:${c.hue}">${c.big}</span>
+      <span class="why">${c.why}</span>
+    </div>`).join('');
+
+  // --- heatmap
+  let mx = 0;
+  for (let i = 0; i < NG; i++) for (let j = 0; j < NG; j++) mx = Math.max(mx, P[i][j]);
+  const key = (p) => `${p[0]}:${p[1]}`;
+  const marks = { [key(safe.pick)]: HUES[0], [key(modal.pick)]: HUES[1], [key(brCrowd.pick)]: HUES[2] };
+  let html = '';
+  for (let j = NG - 1; j >= 0; j--) {
+    for (let i = 0; i < NG; i++) {
+      const p = P[i][j], rel = mx > 0 ? p / mx : 0;
+      const mk = marks[`${i}:${j}`];
+      const alpha = 0.06 + 0.94 * Math.pow(rel, 0.55);
+      const style = `background:rgba(53,208,127,${alpha.toFixed(3)});`
+        + (mk ? `box-shadow:inset 0 0 0 2px ${mk};` : '');
+      html += `<div class="cell${rel < 0.02 ? ' zero' : ''}" style="${style}"
+        title="${i}:${j} — ${pct(p, 2)}">${p >= 0.005 ? (100 * p).toFixed(0) : ''}</div>`;
+    }
+  }
+  $('heat').style.gridTemplateColumns = `repeat(${NG}, 1fr)`;
+  $('heat').innerHTML = html;
+  $('heatAxis').innerHTML = Array.from({ length: NG }, (_, i) => `<span>${i}</span>`).join('');
+
+  // --- worst case box
+  $('worstBox').innerHTML = `
+    <div class="tw"><table>
+      <thead><tr><th>Tipp</th><th>Worst Case</th><th>gegen Schnitt</th><th>Wahrscheinlichkeit</th></tr></thead>
+      <tbody>
+        <tr><td><strong>${key(safe.pick)}</strong> <span class="dim">sicher</span></td>
+            <td class="num win">${pct(safe.guarantee)}</td>
+            <td class="num">${pct(brCrowd.evAll[safe.idx])}</td>
+            <td class="num">${pct(P[safe.pick[0]][safe.pick[1]])}</td></tr>
+        <tr><td><strong>${key(modal.pick)}</strong> <span class="dim">wahrscheinlich</span></td>
+            <td class="num ${safe.guarantee > worstOf(A, modal.idx) + 1e-9 ? 'lose' : ''}">${pct(worstOf(A, modal.idx))}</td>
+            <td class="num">${pct(brCrowd.evAll[modal.idx])}</td>
+            <td class="num">${pct(modal.p)}</td></tr>
+      </tbody>
+    </table></div>`;
+
+  // --- EV table vs opponent archetypes
+  const rows = [
+    ['spiegelt deinen Tipp', null],
+    ['tippt immer 1:1', pointMass(1, 1)],
+    ['tippt immer 1:0', pointMass(1, 0)],
+    ['tippt immer 2:1', pointMass(2, 1)],
+    ['gleichverteilt über 20 Ergebnisse', uniformCrowd()],
+    ['modellierter Mitspieler-Schnitt', cl],
+  ];
+  const cols = [['sicher', safe.idx], ['wahrscheinlich', modal.idx], ['Antwort', brCrowd.idx]];
+  let t = `<thead><tr><th>Gegner</th>${cols.map(([n]) => `<th>${n}</th>`).join('')}</tr></thead><tbody>`;
+  for (const [label, dist] of rows) {
+    t += `<tr class="${dist === null ? 'mirror' : ''}"><td>${label}</td>`;
+    for (const [, idx] of cols) {
+      const v = dist === null ? A[idx][idx] : evAgainst(A, dist)[idx];
+      t += `<td class="num ${v > 0.5 + 1e-9 ? 'win' : v < 0.5 - 1e-9 ? 'lose' : ''}">${pct(v)}</td>`;
+    }
+    t += '</tr>';
+  }
+  t += '</tbody>';
+  $('evTable').innerHTML = t;
+
+  // --- opponent section
+  renderOpponent(A, P, lh, la);
+}
+
+function worstOf(A, idx) {
+  let w = Infinity;
+  for (let t = 0; t < NACT; t++) if (A[idx][t] < w) w = A[idx][t];
+  return w;
+}
+
+function renderOpponent(A, P, lh, la) {
+  const oi = state.opp[0], oj = state.opp[1];
+  const oppIdx = oi * NG + oj;
+  const oppDist = pointMass(oi, oj);
+  const br = bestResponse(A, oppDist);
+  const evAll = evAgainst(A, oppDist);
+
+  // Rank every tip by EV against this specific opponent.
+  const ranked = PTS.map((p, i) => ({ p, i, ev: evAll[i] })).sort((a, b) => b.ev - a.ev);
+  const top = ranked.slice(0, 6);
+
+  $('oppOut').innerHTML = `
+    <div class="grid g3" style="margin-bottom:16px">
+      <div class="stat">
+        <div class="k">Gegner tippt</div>
+        <div class="v" style="color:var(--bad)">${oi} : ${oj}</div>
+        <div class="n">angenommen als fester Tipp</div>
+      </div>
+      <div class="stat" style="border-color:var(--acc2)">
+        <div class="k">Deine beste Antwort</div>
+        <div class="v" style="color:var(--acc)">${br.pick[0]} : ${br.pick[1]}</div>
+        <div class="n">Gewinnwahrscheinlichkeit ${pct(br.ev)}</div>
+      </div>
+      <div class="stat">
+        <div class="k">Wenn du dasselbe tippst</div>
+        <div class="v" style="color:var(--warn)">${pct(A[oppIdx][oppIdx])}</div>
+        <div class="n">Spiegelung ⇒ Distanz-Gleichstand ⇒ Ballbesitz-Münzwurf</div>
+      </div>
+    </div>
+    <div class="tw"><table>
+      <thead><tr><th>#</th><th>Dein Tipp</th><th>Gewinnwahrsch.</th><th>Ergebniswahrsch.</th><th>Distanz zu ${oi}:${oj}</th></tr></thead>
+      <tbody>${top.map((r, k) => `
+        <tr><td class="dim">${k + 1}</td>
+            <td><strong>${r.p[0]} : ${r.p[1]}</strong></td>
+            <td class="num ${r.ev > 0.5 ? 'win' : 'lose'}">${pct(r.ev)}</td>
+            <td class="num dim">${pct(P[r.p[0]][r.p[1]])}</td>
+            <td class="num dim">${de(tipDistance(r.p, [oi, oj]), 0)}</td></tr>`).join('')}
+      </tbody>
+    </table></div>
+    <p class="note" style="margin-top:14px">
+      Der Ertrag gegen einen <em>festen</em> Gegnertipp hängt nur an der Geometrie der Distanzen —
+      das Modell liefert nur die Gewichte. Deshalb ist dieser Teil robust: Wenn du wirklich weißt,
+      was dein Gegner tippt, ist die Antwort hier verlässlich.
+      ${br.ev > 0.5 ? `Du holst <strong>+${de((br.ev - 0.5) * 100, 1)} Prozentpunkte</strong> gegenüber einem Münzwurf.` : 'Kein Vorteil — dieser Gegnertipp ist schwer zu schlagen.'}
+    </p>`;
+}
+
+/* ---------- static sections ---------- */
+function renderStatic() {
+  // Stats
+  $('statRow').innerHTML = `
+    <div class="stat"><div class="k">Kalibrierungsdaten</div><div class="v">104</div>
+      <div class="n">Spiele der WM 2026, 308 Tore — exakt die offizielle FIFA-Summe</div></div>
+    <div class="stat"><div class="k">Garantierte Obergrenze</div><div class="v no">50,0 %</div>
+      <div class="n">für jeden Tipp, in jeder Partie — Folge des Spiegel-Beweises</div></div>
+    <div class="stat"><div class="k">Partien mit zwei Antworten</div><div class="v wa">58,0 %</div>
+      <div class="n">1 308 von 2 256 Paarungen: sicherster ≠ wahrscheinlichster Tipp</div></div>`;
+
+  // CV table
+  const cv = M.cv.curve;
+  $('cvTable').innerHTML = `<thead><tr><th>ridge</th><th>Training LL</th><th>Holdout LL</th><th>Lücke</th></tr></thead>
+    <tbody>${cv.map((c) => `<tr${c.ridge === M.cv.best ? ' style="background:rgba(53,208,127,.08)"' : ''}>
+      <td class="num">${c.ridge}${c.ridge === M.cv.best ? ' <span class="ok">← gewählt</span>' : ''}</td>
+      <td class="num">${de(c.trainLL, 4)}</td>
+      <td class="num">${de(c.holdoutLL, 4)}</td>
+      <td class="num ${c.trainLL - c.holdoutLL > 2 ? 'lose' : ''}">${de(c.trainLL - c.holdoutLL, 4)}</td></tr>`).join('')}</tbody>`;
+
+  // Backtest table
+  const bt = M.backtest;
+  const opps = M.archetypes;
+  let h = `<thead><tr><th>Strategie</th>${opps.map((o) => `<th>${o}</th>`).join('')}</tr></thead><tbody>`;
+  for (const [s, byO] of Object.entries(bt)) {
+    h += `<tr><td><strong>${s}</strong></td>`;
+    for (const o of opps) {
+      const r = byO[o];
+      const best = Math.max(...Object.values(byO).map((x) => x.pct));
+      h += `<td class="num ${r.pct === best ? 'win' : ''}">${pct(r.pct, 0)}<span class="dim" style="font-size:11px"> · ${r.w}-${r.l}-${r.d}</span></td>`;
+    }
+    h += '</tr>';
+  }
+  h += '</tbody>';
+  $('btTable').innerHTML = h;
+
+  $('btNote').innerHTML = `
+    <p class="note">
+      Zeile <em>mirrors us</em> ist die wichtigste: Dort spiegelt der Gegner deinen Tipp, jedes
+      Duell endet im Distanz-Gleichstand, und <strong>jede</strong> Strategie holt exakt
+      16,0 von 32 Punkten. Das ist der Beweis in echten Daten — keine Strategie schlägt die
+      Schranke.
+    </p>
+    <p class="note">
+      Gegen einen Gegner mit fester Lieblings-Tendenz lohnt sich das Lesen dagegen deutlich:
+      Wer gegen einen 1:0-Dauer-Tipper selbst <strong>1:1</strong> setzt, gewinnt 23 von 32
+      Duellen (71,9 %). Der sicherste Tipp ist im Backtest gleichzeitig der stärkste gegen einen
+      realistischen Mitspieler-Schnitt (71,9 % gegen 68,8 % beim wahrscheinlichsten Ergebnis) —
+      er verliert also nichts an Sicherheit und gewinnt Ertrag dazu.
+    </p>`;
+
+  // Germany
+  const g = bundle.germany;
+  if (g) {
+    $('gerBox').innerHTML = `
+      <div class="tw"><table>
+        <thead><tr><th>Phase</th><th>Angriffsstärke</th><th>Rang</th><th>Standardfehler</th></tr></thead>
+        <tbody>
+          <tr><td>Gruppenphase (Modell)</td><td class="num">${num(g.att)}</td><td class="num">${g.rankAtt} / 48</td><td class="num dim">± ${num(g.seAtt)}</td></tr>
+          <tr><td>K.-o.-Phase (Modell)</td><td class="num">${num(g.attKO)}</td><td class="num">${g.rankKO} / 48</td><td class="num dim">–</td></tr>
+          <tr><td>Differenz</td><td class="num no">${num(g.drift)}</td><td class="num dim">${num(g.driftSE, 2)} SE</td><td class="num dim">–</td></tr>
+        </tbody>
+      </table></div>
+      <p class="note" style="margin-top:12px">
+        Differenz <strong>${num(g.drift)}</strong> = <strong>${num(g.driftSE, 2)} Standardfehler</strong>.
+        Deutschlands Gruppenspiele:
+        ${g.groupMatches.map((m) => `<strong>${m.gf}:${m.ga}</strong> gegen ${m.opp}`).join(', ')}.
+      </p>`;
+  }
+}
+
+/* ---------- events ---------- */
+$('home').addEventListener('change', (e) => { state.home = e.target.value; render(); });
+$('away').addEventListener('change', (e) => { state.away = e.target.value; render(); });
+$('swapBtn').addEventListener('click', () => {
+  [state.home, state.away] = [state.away, state.home];
+  selectOpts($('home'), state.home); selectOpts($('away'), state.away); render();
+});
+$('neutralBtn').addEventListener('click', () => { state.neutral = !state.neutral; render(); });
+$('drawAv').addEventListener('input', (e) => {
+  state.drawAv = +e.target.value;
+  $('drawAvV').textContent = num(state.drawAv, 2);
+  render();
+});
+$('oppScore').addEventListener('change', (e) => {
+  const [i, j] = e.target.value.split(':').map(Number);
+  state.opp = [i, j];
+  render();
+});
+// Populate the opponent scoreline dropdown with the full 9x9 grid.
+$('oppScore').innerHTML = PTS.map(([i, j]) => `<option value="${i}:${j}"${i === 1 && j === 1 ? ' selected' : ''}>${i} : ${j}</option>`).join('');
+$('oppRefresh').addEventListener('click', render);
+
+$('drawAvV').textContent = num(state.drawAv, 2);
+renderStatic();
+render();
+window.__ready = true;
+</script>
+</body>
+</html>
