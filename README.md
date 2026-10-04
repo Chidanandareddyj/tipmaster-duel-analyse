@@ -1,5 +1,7 @@
 # Duel-Pick-Analyse — TipMaster / WM 2026
 
+**Live: https://chidanandareddyj.github.io/tipmaster-duel-analyse/**
+
 A calibrated tool for **TipMaster's** exact-scoreline head-to-head game, built on all
 104 real matches of the 2026 World Cup.
 
