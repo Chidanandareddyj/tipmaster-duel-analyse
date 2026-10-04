@@ -1,6 +1,6 @@
-# Calibration & backtest output
+﻿# Calibration & backtest output
 
-Generated: 2026-10-04T11:42:08.722Z
+Generated: 2026-10-04T11:54:57.022Z
 
 - Teams: 48; group matches fitted: 72; knockout matches backtested: 32
 - Total goals: 308 (reconciles exactly with FIFA's published 308)
