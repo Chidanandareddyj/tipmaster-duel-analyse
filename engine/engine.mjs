@@ -1,5 +1,5 @@
 /**
- * TipMaster Duel Pick Optimizer — model core.
+ * TipMaster Duel-Pick-Analyse — model core.
  *
  * Three pieces of maths, deliberately separated:
  *
@@ -8,12 +8,24 @@
  *   2. duelOutcome()   — the game's actual duel rule, read off TipMaster: the
  *                        tip closer to the real scoreline wins; distance is
  *                        SQUARED error. Level => possession call breaks it.
- *   3. equilibrium()   — the duel is a two-player zero-sum game over the 9x9
+ *   3. maximinPure()   — the duel is a two-player zero-sum game over the 9x9
  *                        grid of scorelines. Solve it properly instead of
  *                        guessing "the most likely scoreline".
  *
- * The headline result this file exists to prove: the most likely scoreline is
- * NOT the scoreline that maximises your chance of winning the duel.
+ * WHAT THIS FILE ENDED UP PROVING — and it is the opposite of the hypothesis it
+ * was written to test. I set out to show that the most likely scoreline is not
+ * the best duel pick. It is. Worse: NOTHING is. Because the opponent can always
+ * mirror your tip, and a mirrored duel is level on squared distance for every
+ * possible result, they can always force the possession coin flip. So the
+ * matrix is symmetric, the game value is exactly 1/2, and no pure tip can beat
+ * 0.5 in the worst case (`maximinPure` returns exactly 0.500000 for every
+ * fixture — see tests/test-engine.mjs, which asserts it over all 81 tips).
+ *
+ * The useful consequence is not "here is a clever scoreline" but "here is where
+ * the ceiling is, and here is where the real edge lives instead": reading a
+ * specific opponent. Note also that the safest tip and the most likely tip
+ * still differ on 58% of fixtures, so the choice is not arbitrary — it just
+ * cannot buy you safety, only expected value.
  */
 
 export const MAX_GOALS = 8;           // grid is 0..8 goals each side (9x9)
