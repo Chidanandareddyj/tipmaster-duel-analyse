@@ -556,7 +556,7 @@ const bundle = {
 
 mkdirSync('../site/data', { recursive: true });
 const json = JSON.stringify(bundle);
-writeFileSync('../site/data/bundle.json', json);
+writeFileSync('../site/data/bundle.json', json, 'utf8');
 console.log(`\nwrote bundle.json (${(json.length / 1024).toFixed(1)} KB)`);
 
 /* --- 8. markdown report ------------------------------------------- */
@@ -600,5 +600,8 @@ if (ger) {
   md.push('|---|---|');
   for (const m of gerMatches) md.push(`| ${m.homeName === 'Germany' ? m.awayName : m.homeName} | ${m.homeName === 'Germany' ? m.hg + '-' + m.ag : m.ag + '-' + m.hg} |`);
 }
-writeFileSync('RESULTS.md', md.join('\n'));
+// Write with an explicit UTF-8 BOM. Without it, Windows PowerShell's default
+// Get-Content decodes the file as ANSI, and every em-dash and umlaut becomes
+// mojibake when the file is read back.
+writeFileSync('RESULTS.md', '\ufeff' + md.join('\n'), 'utf8');
 console.log('wrote RESULTS.md');
